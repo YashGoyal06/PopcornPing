@@ -20,12 +20,6 @@ const MicIcon = ({ className }) => (
 const TrashIcon = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
 );
-const ClockIcon = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-);
-const VideoIcon = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
-);
 const TrendingUpIcon = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
 );
@@ -50,6 +44,7 @@ const Dashboard = () => {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [generatedCode, setGeneratedCode] = useState(''); 
+  const [joinCode, setJoinCode] = useState(''); // New state for joining
   const [isPasswordProtected, setIsPasswordProtected] = useState(false);
   const [waitingRoom, setWaitingRoom] = useState(false);
   
@@ -93,6 +88,33 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleJoinRoom = () => {
+    if (!joinCode.trim()) return;
+    
+    // Check if it's a full URL or just a code
+    let roomId = joinCode;
+    try {
+      if (joinCode.includes('http')) {
+        const url = new URL(joinCode);
+        // Assuming path is /room/:id, grab the last segment
+        const pathParts = url.pathname.split('/');
+        if (pathParts.length > 0) {
+          roomId = pathParts[pathParts.length - 1];
+        }
+      }
+    } catch (e) {
+      // Not a valid URL, treat as code
+      console.log("Input is not a URL, using as code");
+    }
+
+    // Handle "room/XYZ" case if pasted without protocol
+    if (roomId.includes('/room/')) {
+        roomId = roomId.split('/room/')[1];
+    }
+
+    navigate(`/room/${roomId}`);
   };
 
   const copyToClipboard = (text) => {
@@ -185,40 +207,64 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Share Your Code */}
-            <div className="bg-[#111] border border-[#222] rounded-3xl p-8 flex flex-col md:flex-row items-center justify-between gap-8">
-              <div className="space-y-3 text-center md:text-left w-full">
-                 <h2 className="text-lg text-gray-300 font-medium">Share Your Code</h2>
-                 <div>
-                    <span className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-gray-100 to-gray-600 tracking-tight block">
-                       {generatedCode}
-                    </span>
-                 </div>
-                 
-                 <div className="flex flex-wrap gap-3 mt-4 justify-center md:justify-start">
-                    <button 
-                      onClick={() => copyToClipboard(generatedCode)}
-                      className="flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] rounded-lg text-xs text-gray-400 hover:text-white border border-[#333] transition-colors"
-                    >
-                       <CopyIcon className="w-3 h-3" /> Copy Code
-                    </button>
-                    <button 
-                       onClick={() => copyToClipboard(`${window.location.origin}/room/${generatedCode}`)}
-                       className="flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] rounded-lg text-xs text-gray-400 hover:text-white border border-[#333] transition-colors"
-                    >
-                       <LinkIcon className="w-3 h-3" /> Copy Link
-                    </button>
-                 </div>
-              </div>
+            {/* Share or Join Code Section */}
+            <div className="bg-[#111] border border-[#222] rounded-3xl p-8 flex flex-col gap-8">
               
-              <div className="w-full md:w-auto flex-shrink-0">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-8 border-b border-[#222] pb-8">
+                <div className="space-y-3 text-center md:text-left w-full">
+                  <h2 className="text-lg text-gray-300 font-medium">Share Your Code</h2>
+                  <div>
+                      <span className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-gray-100 to-gray-600 tracking-tight block">
+                        {generatedCode}
+                      </span>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-3 mt-4 justify-center md:justify-start">
+                      <button 
+                        onClick={() => copyToClipboard(generatedCode)}
+                        className="flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] rounded-lg text-xs text-gray-400 hover:text-white border border-[#333] transition-colors"
+                      >
+                        <CopyIcon className="w-3 h-3" /> Copy Code
+                      </button>
+                      <button 
+                        onClick={() => copyToClipboard(`${window.location.origin}/room/${generatedCode}`)}
+                        className="flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] rounded-lg text-xs text-gray-400 hover:text-white border border-[#333] transition-colors"
+                      >
+                        <LinkIcon className="w-3 h-3" /> Copy Link
+                      </button>
+                  </div>
+                </div>
+                
+                <div className="w-full md:w-auto flex-shrink-0">
+                  <button 
+                      onClick={handleCreateRoom}
+                      className="w-full md:w-48 py-4 bg-white hover:bg-gray-200 text-black font-bold text-lg rounded-xl shadow-lg transition-all"
+                  >
+                      Start Meeting
+                  </button>
+                </div>
+              </div>
+
+              {/* Join Existing Room Input */}
+              <div className="flex flex-col md:flex-row items-center gap-4">
+                 <div className="flex-1 w-full">
+                    <label className="text-gray-400 text-xs font-bold uppercase tracking-wider block mb-2">Have a link or code?</label>
+                    <input 
+                      type="text" 
+                      value={joinCode}
+                      onChange={(e) => setJoinCode(e.target.value)}
+                      placeholder="Enter room code or paste link here"
+                      className="w-full bg-[#1a1a1a] border border-[#333] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/20 transition-all placeholder:text-gray-600"
+                    />
+                 </div>
                  <button 
-                    onClick={handleCreateRoom}
-                    className="w-full md:w-48 py-4 bg-white hover:bg-gray-200 text-black font-bold text-lg rounded-xl shadow-lg transition-all"
+                    onClick={handleJoinRoom}
+                    className="w-full md:w-auto px-8 py-3 mt-6 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-white font-bold rounded-xl border border-[#333] transition-all"
                  >
-                    Start Meeting
+                    Join Room
                  </button>
               </div>
+
             </div>
 
           </div>

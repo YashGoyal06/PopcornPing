@@ -5,7 +5,7 @@ import Peer from 'simple-peer';
 import { roomAPI } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
-// Icons
+// --- Icons ---
 const MicIcon = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
 );
@@ -27,66 +27,140 @@ const PhoneOffIcon = ({ className }) => (
 const CopyIcon = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
 );
+const PinIcon = ({ className, filled }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>
+);
+
+// --- Video Player Component ---
+const VideoPlayer = ({ stream, isLocal = false, onPin, isPinned, label }) => {
+  const ref = useRef();
+
+  useEffect(() => {
+    if (ref.current && stream) {
+      ref.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  return (
+    <div className={`relative bg-[#1a1a1a] rounded-xl overflow-hidden border border-gray-800 shadow-xl transition-all ${isPinned ? 'w-full h-full' : 'w-full h-full'}`}>
+      <video
+        ref={ref}
+        autoPlay
+        playsInline
+        muted={isLocal} 
+        style={{ transform: isLocal && !label?.toLowerCase().includes('screen') ? 'scaleX(-1)' : 'none' }}
+        className="w-full h-full object-contain bg-black"
+      />
+      
+      {/* Overlay Info */}
+      <div className="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/70 to-transparent flex justify-between items-start opacity-0 hover:opacity-100 transition-opacity duration-300">
+        <div className="bg-black/40 backdrop-blur-md px-2 py-1 rounded text-xs font-medium text-white">
+          {label || 'User'}
+        </div>
+        <button 
+          onClick={onPin}
+          className={`p-1.5 rounded-full backdrop-blur-md transition-colors ${isPinned ? 'bg-blue-600 text-white' : 'bg-black/40 text-gray-300 hover:bg-white/20'}`}
+          title={isPinned ? "Unpin" : "Pin"}
+        >
+          <PinIcon className="w-3.5 h-3.5" filled={isPinned} />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const VideoRoom = () => {
   const { roomId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
   
-  const [peers, setPeers] = useState([]);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  // State
+  const [peers, setPeers] = useState([]); // Array of { peerID, peer }
+  const [remoteStreams, setRemoteStreams] = useState([]); // Array of { id, stream, peerID }
+  const [userStream, setUserStream] = useState(null);
+  const [screenStream, setScreenStream] = useState(null);
+  const [pinnedStreamId, setPinnedStreamId] = useState(null); // ID of pinned stream
+  
+  // Controls
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [roomInfo, setRoomInfo] = useState(null);
   const [showCopied, setShowCopied] = useState(false);
-  
-  const socketRef = useRef();
-  const userVideo = useRef();
-  const peersRef = useRef([]);
-  const streamRef = useRef();
-  const screenStreamRef = useRef();
 
+  // Refs
+  const socketRef = useRef();
+  const peersRef = useRef([]); // Keep track of peers for cleanup
+  const userStreamRef = useRef();
+  const screenStreamRef = useRef(); // Corrected declaration
+  const isMounted = useRef(true); // Track mount status
+
+  // --- Initialization & Cleanup ---
   useEffect(() => {
-    fetchRoomInfo();
-    initializeMedia();
+    isMounted.current = true;
+
+    // Prevent accidental refresh
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    const init = async () => {
+        try {
+            await fetchRoomInfo();
+            if (isMounted.current) {
+                await initializeMedia();
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+    
+    init();
 
     return () => {
-      console.log("Component unmounting. Running cleanup.");
-      cleanupConnection(); 
+      isMounted.current = false;
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      cleanupConnection();
     };
-  }, []); 
+  }, [roomId]); 
 
-  // Comprehensive cleanup function 
   const cleanupConnection = () => {
+    console.log("Cleaning up connections...");
     
-    if (userVideo.current) {
-      userVideo.current.srcObject = null;
-    }
-
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => {
-        track.stop(); 
-        console.log(`Stopped ${track.kind} track`);
-      });
-      streamRef.current = null;
-    }
-
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => {
+    // 1. Stop Local Camera
+    if (userStreamRef.current) {
+      userStreamRef.current.getTracks().forEach(track => {
         track.stop();
-        console.log(`Stopped screen share ${track.kind} track`);
+        track.enabled = false;
       });
+      userStreamRef.current = null;
+    }
+
+    // 2. Stop Screen Share
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
       screenStreamRef.current = null;
     }
-    
+
+    // 3. Destroy Peers
     peersRef.current.forEach(({ peer }) => {
-      if (peer) {
+      if (peer && !peer.destroyed) {
         peer.destroy();
       }
     });
     peersRef.current = [];
-    setPeers([]);
     
+    // Clear state only if mounted to avoid react warnings
+    if (isMounted.current) {
+        setPeers([]);
+        setRemoteStreams([]);
+        setUserStream(null);
+        setScreenStream(null);
+    }
+
+    // 4. Disconnect Socket
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
@@ -96,75 +170,94 @@ const VideoRoom = () => {
   const fetchRoomInfo = async () => {
     try {
       const response = await roomAPI.getRoom(roomId);
-      setRoomInfo(response.data.room);
-      await roomAPI.joinRoom(roomId);
+      if (isMounted.current) {
+          setRoomInfo(response.data.room);
+          await roomAPI.joinRoom(roomId);
+      }
     } catch (error) {
       console.error('Error fetching room:', error);
-      alert('Room not found or expired');
-      navigate('/dashboard');
+      if (isMounted.current) navigate('/dashboard');
     }
   };
 
+  // --- WebRTC Logic ---
   const initializeMedia = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       
-      streamRef.current = stream;
-      if (userVideo.current) {
-        userVideo.current.srcObject = stream;
+      // CRITICAL: Check if still mounted after async call
+      if (!isMounted.current) {
+          // If unmounted during getUserMedia, immediately stop these tracks
+          stream.getTracks().forEach(t => t.stop());
+          return;
       }
 
+      // If there was an old stream pending in ref (race condition), stop it
+      if (userStreamRef.current) {
+         userStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+
+      userStreamRef.current = stream;
+      setUserStream(stream);
+
       socketRef.current = io(process.env.REACT_APP_SOCKET_URL);
-      
       socketRef.current.emit('join-room', roomId, user.id);
 
+      // --- Socket Events ---
+
       socketRef.current.on('user-connected', (userId) => {
+        if (!isMounted.current) return;
         const peer = createPeer(userId, socketRef.current.id, stream);
-        peersRef.current.push({
-          peerID: userId,
-          peer,
-        });
-        setPeers((users) => [...users, { peerID: userId, peer }]);
-      });
-
-      socketRef.current.on('offer', (offer, id) => {
-        const peer = addPeer(offer, id, stream);
-        peersRef.current.push({
-          peerID: id,
-          peer,
-        });
-        setPeers((users) => [...users, { peerID: id, peer }]);
-      });
-
-      socketRef.current.on('answer', (answer, id) => {
-        const item = peersRef.current.find((p) => p.peerID === id);
-        if (item) {
-          item.peer.signal(answer);
-        }
-      });
-
-      socketRef.current.on('ice-candidate', (candidate, id) => {
-        const item = peersRef.current.find((p) => p.peerID === id);
-        if (item) {
-          item.peer.signal(candidate);
-        }
+        peersRef.current.push({ peerID: userId, peer });
+        setPeers(prev => [...prev, { peerID: userId, peer }]);
       });
 
       socketRef.current.on('user-disconnected', (userId) => {
-        const peerObj = peersRef.current.find((p) => p.peerID === userId);
-        if (peerObj) {
-          peerObj.peer.destroy();
-        }
-        const peers = peersRef.current.filter((p) => p.peerID !== userId);
-        peersRef.current = peers;
-        setPeers(peers);
+        if (!isMounted.current) return;
+        const peerObj = peersRef.current.find(p => p.peerID === userId);
+        if (peerObj && peerObj.peer) peerObj.peer.destroy();
+        
+        peersRef.current = peersRef.current.filter(p => p.peerID !== userId);
+        setPeers(prev => prev.filter(p => p.peerID !== userId));
+        setRemoteStreams(prev => prev.filter(s => s.peerID !== userId));
       });
+
+      socketRef.current.on('offer', (offer, id) => {
+        if (!isMounted.current) return;
+        const peer = addPeer(offer, id, stream);
+        peersRef.current.push({ peerID: id, peer });
+        setPeers(prev => [...prev, { peerID: id, peer }]);
+      });
+
+      socketRef.current.on('answer', (answer, id) => {
+        const p = peersRef.current.find(p => p.peerID === id);
+        if (p) p.peer.signal(answer);
+      });
+
+      socketRef.current.on('ice-candidate', (candidate, id) => {
+        const p = peersRef.current.find(p => p.peerID === id);
+        if (p) p.peer.signal(candidate);
+      });
+
+      // Notification only - stream handling is done via peer.on('stream')
+      socketRef.current.on('screen-share-started', (id) => {
+        console.log(`User ${id} started screen sharing`);
+      });
+
+      socketRef.current.on('screen-share-stopped', (id) => {
+        console.log(`User ${id} stopped screen sharing`);
+        setRemoteStreams(prev => prev.filter(s => {
+           // Keep streams; simple-peer usually removes track automatically or we can add logic here if needed
+           return true; 
+        }));
+      });
+
     } catch (error) {
-      console.error('Error accessing media devices:', error);
-      alert('Please allow camera and microphone access');
+      console.error('Media Error:', error);
+      if (isMounted.current) {
+        alert('Could not access camera/microphone');
+        navigate('/dashboard');
+      }
     }
   };
 
@@ -175,8 +268,12 @@ const VideoRoom = () => {
       stream,
     });
 
-    peer.on('signal', (signal) => {
+    peer.on('signal', signal => {
       socketRef.current.emit('offer', signal, roomId);
+    });
+
+    peer.on('stream', remoteStream => {
+      handleRemoteStream(remoteStream, userToSignal);
     });
 
     return peer;
@@ -189,298 +286,247 @@ const VideoRoom = () => {
       stream,
     });
 
-    peer.on('signal', (signal) => {
+    peer.on('signal', signal => {
       socketRef.current.emit('answer', signal, roomId);
     });
 
-    peer.signal(incomingSignal);
+    peer.on('stream', remoteStream => {
+      handleRemoteStream(remoteStream, callerID);
+    });
 
+    peer.signal(incomingSignal);
     return peer;
   };
 
+  const handleRemoteStream = (stream, peerID) => {
+    setRemoteStreams(prev => {
+      if (prev.some(s => s.id === stream.id)) return prev;
+      return [...prev, { id: stream.id, stream, peerID }];
+    });
+  };
+
+  // --- Controls ---
+
   const toggleMute = () => {
-    if (streamRef.current) {
-      const audioTrack = streamRef.current.getAudioTracks()[0];
-      audioTrack.enabled = !audioTrack.enabled;
-      setIsMuted(!audioTrack.enabled);
+    if (userStreamRef.current) {
+      const track = userStreamRef.current.getAudioTracks()[0];
+      if (track) {
+        track.enabled = !track.enabled;
+        setIsMuted(!track.enabled);
+      }
     }
   };
 
   const toggleVideo = () => {
-    if (streamRef.current) {
-      const videoTrack = streamRef.current.getVideoTracks()[0];
-      videoTrack.enabled = !videoTrack.enabled;
-      setIsVideoOff(!videoTrack.enabled);
+    if (userStreamRef.current) {
+      const track = userStreamRef.current.getVideoTracks()[0];
+      if (track) {
+        track.enabled = !track.enabled;
+        setIsVideoOff(!track.enabled);
+      }
     }
   };
 
-  const shareScreen = async () => {
-    if (!isScreenSharing) {
-      try {
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-        });
-        
-        screenStreamRef.current = screenStream;
-        
-        const videoTrack = screenStream.getVideoTracks()[0];
-        
-        peersRef.current.forEach(({ peer }) => {
-          const sender = peer._pc.getSenders().find((s) => s.track?.kind === 'video');
-          if (sender) {
-            sender.replaceTrack(videoTrack);
-          }
-        });
+  const startScreenShare = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      screenStreamRef.current = stream;
+      setScreenStream(stream);
+      setIsScreenSharing(true);
+      setPinnedStreamId('local-screen'); // Auto-pin my screen
 
-        if (userVideo.current) {
-          userVideo.current.srcObject = screenStream;
-        }
+      // Add stream to all peers
+      peersRef.current.forEach(({ peer }) => {
+        peer.addStream(stream);
+      });
 
-        videoTrack.onended = () => {
-          stopScreenShare();
-        };
-
-        setIsScreenSharing(true);
-        socketRef.current.emit('screen-share-started', roomId);
-      } catch (error) {
-        console.error('Error sharing screen:', error);
-      }
-    } else {
-      stopScreenShare();
+      // Handle native stop button
+      stream.getVideoTracks()[0].onended = () => stopScreenShare();
+      
+      socketRef.current.emit('screen-share-started', roomId);
+    } catch (error) {
+      console.error("Screen share failed", error);
     }
   };
 
   const stopScreenShare = () => {
     if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      // Remove stream from peers
+      peersRef.current.forEach(({ peer }) => {
+        peer.removeStream(screenStreamRef.current);
+      });
+      // Stop tracks
+      screenStreamRef.current.getTracks().forEach(t => t.stop());
+      screenStreamRef.current = null;
     }
-
-    const videoTrack = streamRef.current.getVideoTracks()[0];
-    
-    peersRef.current.forEach(({ peer }) => {
-      const sender = peer._pc.getSenders().find((s) => s.track?.kind === 'video');
-      if (sender) {
-        sender.replaceTrack(videoTrack);
-      }
-    });
-
-    if (userVideo.current) {
-      userVideo.current.srcObject = streamRef.current;
-    }
-
+    setScreenStream(null);
     setIsScreenSharing(false);
+    
+    // Unpin if necessary
+    setPinnedStreamId(prev => (prev === 'local-screen' ? null : prev));
+    
     socketRef.current.emit('screen-share-stopped', roomId);
   };
 
-  const copyRoomLink = () => {
-    const roomLink = `${window.location.origin}/room/${roomId}`;
-    navigator.clipboard.writeText(roomLink);
+  const leaveRoom = () => {
+    cleanupConnection();
+    navigate('/dashboard');
+  };
+
+  const copyLink = () => {
+    const link = `${window.location.origin}/room/${roomId}`;
+    navigator.clipboard.writeText(link);
     setShowCopied(true);
     setTimeout(() => setShowCopied(false), 2000);
   };
 
-  // Function called when user clicks the "Leave" button
-  const leaveRoom = async () => {
-    // Cleanup all connections first
-    cleanupConnection();
+  // --- Render Helpers ---
+
+  const getAllStreams = () => {
+    const streams = [];
     
-    // Navigate back to dashboard
-    navigate('/dashboard');
+    // 1. Local Camera
+    if (userStream) {
+      streams.push({ id: 'local-cam', stream: userStream, isLocal: true, label: 'You' });
+    }
+    
+    // 2. Local Screen
+    if (screenStream) {
+      streams.push({ id: 'local-screen', stream: screenStream, isLocal: true, label: 'Your Screen' });
+    }
+    
+    // 3. Remote Streams
+    remoteStreams.forEach(rs => {
+      streams.push({ 
+        id: rs.id, 
+        stream: rs.stream, 
+        isLocal: false, 
+        label: `Participant ${rs.peerID.substr(0,4)}` 
+      });
+    });
+
+    return streams;
   };
 
+  const allStreams = getAllStreams();
+  const pinnedStream = allStreams.find(s => s.id === pinnedStreamId);
+
   return (
-    <div className="min-h-screen bg-black flex flex-col relative overflow-hidden">
+    <div className="flex flex-col h-screen bg-black overflow-hidden">
       
-      {/* Background Gradient Effects (omitted for brevity) */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-900/10 blur-[150px] rounded-full"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-900/10 blur-[150px] rounded-full"></div>
+      {/* Header */}
+      <div className="h-16 border-b border-gray-800 bg-[#0a0a0f] flex items-center justify-between px-6 z-20">
+        <div className="flex items-center gap-3">
+          <img src="/logo.png" alt="Logo" className="h-8 w-8" onError={(e) => e.target.style.display='none'} />
+          <div>
+            <h1 className="text-white font-semibold text-sm">{roomInfo?.name || 'Meeting Room'}</h1>
+            <span className="text-gray-500 text-xs">{roomId}</span>
+          </div>
+        </div>
+        <button 
+          onClick={copyLink} 
+          className="flex items-center gap-2 bg-[#222] hover:bg-[#333] text-white text-xs px-3 py-1.5 rounded-full transition-colors"
+        >
+          <CopyIcon className="w-3 h-3" />
+          {showCopied ? "Copied" : "Copy Link"}
+        </button>
       </div>
 
-      {/* Header (omitted for brevity) */}
-      <div className="relative z-10 border-b border-gray-800/50 backdrop-blur-sm bg-black/30">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <img 
-                src="/logo.png" 
-                alt="PopcornPing" 
-                className="h-8 w-8"
-                onError={(e) => { e.target.style.display = 'none'; }}
+      {/* Main Content Area */}
+      <div className="flex-1 flex overflow-hidden relative">
+        
+        {pinnedStream ? (
+          // Pinned Layout
+          <div className="flex-1 flex flex-col md:flex-row w-full h-full p-4 gap-4">
+            
+            {/* Main Stage */}
+            <div className="flex-1 relative bg-[#111] rounded-2xl overflow-hidden border border-gray-800 shadow-2xl">
+              <VideoPlayer 
+                stream={pinnedStream.stream} 
+                isLocal={pinnedStream.isLocal}
+                label={pinnedStream.label}
+                isPinned={true}
+                onPin={() => setPinnedStreamId(null)} // Unpin
               />
-              <div>
-                <h1 className="text-lg font-semibold text-white tracking-wide">
-                  {roomInfo?.name || 'Video Room'}
-                </h1>
-                <p className="text-xs text-gray-500">Room: {roomId}</p>
-              </div>
             </div>
-            
-            <div className="flex items-center gap-3">
-              <button
-                onClick={copyRoomLink}
-                className="px-4 py-2 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-gray-300 hover:text-white rounded-lg transition-all text-sm border border-gray-800 flex items-center gap-2"
-              >
-                <CopyIcon className="w-4 h-4" />
-                {showCopied ? 'Copied!' : 'Copy Link'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Video Grid */}
-      <div className="relative flex-1 p-6 z-10">
-        <div className={`h-full ${peers.length > 0 ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : 'flex items-center justify-center'}`}>
-          
-          {/* Your Video */}
-          <div className="relative bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] rounded-2xl overflow-hidden border border-gray-800/50 shadow-2xl aspect-video">
-            <video
-              ref={userVideo}
-              autoPlay
-              muted
-              playsInline
-              style={{ transform: 'scaleX(-1)' }} 
-              className="w-full h-full object-cover"
-            />
-            
-            {/* User Label and Indicators (omitted for brevity) */}
-            <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-gray-700/50">
-              <span className="text-white text-sm font-medium">You {isScreenSharing && '(Sharing)'}</span>
-            </div>
-            
-            {isVideoOff && (
-              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
-                <div className="w-24 h-24 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
-                  <span className="text-white text-3xl font-bold">
-                    {user?.username?.charAt(0).toUpperCase() || 'U'}
-                  </span>
+            {/* Side Filmstrip */}
+            <div className="md:w-64 w-full flex md:flex-col gap-3 overflow-x-auto md:overflow-y-auto custom-scrollbar">
+              {allStreams.filter(s => s.id !== pinnedStreamId).map(s => (
+                <div key={s.id} className="flex-shrink-0 w-48 md:w-full aspect-video">
+                  <VideoPlayer 
+                    stream={s.stream} 
+                    isLocal={s.isLocal} 
+                    label={s.label}
+                    isPinned={false}
+                    onPin={() => setPinnedStreamId(s.id)}
+                  />
                 </div>
-              </div>
-            )}
-
-            {isMuted && (
-              <div className="absolute top-4 right-4 bg-red-500/90 backdrop-blur-md p-2 rounded-lg">
-                <MicOffIcon className="w-4 h-4 text-white" />
-              </div>
-            )}
+              ))}
+            </div>
           </div>
-
-          {/* Peer Videos */}
-          {peers.map((peer, index) => (
-            <Video key={index} peer={peer.peer} peerID={peer.peerID} />
-          ))}
-        </div>
+        ) : (
+          // Grid Layout
+          <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-rows-fr h-full content-center">
+                {allStreams.map(s => (
+                  <div key={s.id} className="aspect-video w-full h-full max-h-[400px]">
+                    <VideoPlayer 
+                      stream={s.stream} 
+                      isLocal={s.isLocal} 
+                      label={s.label}
+                      isPinned={false}
+                      onPin={() => setPinnedStreamId(s.id)}
+                    />
+                  </div>
+                ))}
+                {allStreams.length === 0 && (
+                  <div className="col-span-full flex items-center justify-center text-gray-500">
+                    Waiting for others...
+                  </div>
+                )}
+             </div>
+          </div>
+        )}
       </div>
 
-      {/* Controls Bar (omitted for brevity) */}
-      <div className="relative z-10 border-t border-gray-800/50 backdrop-blur-sm bg-black/30">
-        <div className="max-w-4xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-center gap-4">
-            
-            {/* Mute Button (omitted for brevity) */}
-            <button
-              onClick={toggleMute}
-              className={`p-4 rounded-full transition-all ${
-                isMuted 
-                  ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/30' 
-                  : 'bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-gray-800'
-              }`}
-              title={isMuted ? 'Unmute' : 'Mute'}
-            >
-              {isMuted ? (
-                <MicOffIcon className="w-5 h-5 text-white" />
-              ) : (
-                <MicIcon className="w-5 h-5 text-white" />
-              )}
-            </button>
+      {/* Footer Controls */}
+      <div className="h-20 bg-[#0a0a0f] border-t border-gray-800 flex items-center justify-center gap-4 z-20">
+        <button
+          onClick={toggleMute}
+          className={`p-3 rounded-full transition-all ${isMuted ? 'bg-red-500 hover:bg-red-600' : 'bg-[#222] hover:bg-[#333]'}`}
+          title={isMuted ? "Unmute" : "Mute"}
+        >
+          {isMuted ? <MicOffIcon className="w-5 h-5 text-white" /> : <MicIcon className="w-5 h-5 text-white" />}
+        </button>
 
-            {/* Video Button (omitted for brevity) */}
-            <button
-              onClick={toggleVideo}
-              className={`p-4 rounded-full transition-all ${
-                isVideoOff 
-                  ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/30' 
-                  : 'bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-gray-800'
-              }`}
-              title={isVideoOff ? 'Turn On Camera' : 'Turn Off Camera'}
-            >
-              {isVideoOff ? (
-                <VideoOffIcon className="w-5 h-5 text-white" />
-              ) : (
-                <VideoIcon className="w-5 h-5 text-white" />
-              )}
-            </button>
+        <button
+          onClick={toggleVideo}
+          className={`p-3 rounded-full transition-all ${isVideoOff ? 'bg-red-500 hover:bg-red-600' : 'bg-[#222] hover:bg-[#333]'}`}
+          title={isVideoOff ? "Turn On Camera" : "Turn Off Camera"}
+        >
+          {isVideoOff ? <VideoOffIcon className="w-5 h-5 text-white" /> : <VideoIcon className="w-5 h-5 text-white" />}
+        </button>
 
-            {/* Screen Share Button (omitted for brevity) */}
-            <button
-              onClick={shareScreen}
-              className={`p-4 rounded-full transition-all ${
-                isScreenSharing 
-                  ? 'bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-600/30' 
-                  : 'bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-gray-800'
-              }`}
-              title={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
-            >
-              <MonitorIcon className="w-5 h-5 text-white" />
-            </button>
+        <button
+          onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+          className={`p-3 rounded-full transition-all ${isScreenSharing ? 'bg-green-600 hover:bg-green-700' : 'bg-[#222] hover:bg-[#333]'}`}
+          title="Share Screen"
+        >
+          <MonitorIcon className="w-5 h-5 text-white" />
+        </button>
 
-            <div className="w-px h-10 bg-gray-800 mx-2"></div>
+        <div className="w-px h-8 bg-gray-700 mx-2"></div>
 
-            {/* Leave Button - Calls the cleanup function and navigates */}
-            <button
-              onClick={leaveRoom}
-              className="px-6 py-4 bg-red-600 hover:bg-red-700 text-white rounded-full transition-all font-medium shadow-lg shadow-red-600/30 flex items-center gap-2"
-            >
-              <PhoneOffIcon className="w-5 h-5" />
-              Leave
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Peer Video Component 
-const Video = ({ peer, peerID }) => {
-  const ref = useRef();
-  const [hasVideo, setHasVideo] = useState(true);
-
-  useEffect(() => {
-    peer.on('stream', (stream) => {
-      ref.current.srcObject = stream;
-      
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack) {
-        setHasVideo(videoTrack.enabled);
-        videoTrack.onended = () => setHasVideo(false);
-      }
-    });
-  }, [peer]);
-
-  return (
-    <div className="relative bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] rounded-2xl overflow-hidden border border-gray-800/50 shadow-2xl aspect-video">
-      <video 
-        ref={ref} 
-        autoPlay 
-        playsInline 
-        style={{ transform: 'scaleX(1)' }} 
-        className="w-full h-full object-cover" 
-      />
-      
-      {/* Peer Label and Placeholder (omitted for brevity) */}
-      <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-gray-700/50">
-        <span className="text-white text-sm font-medium">Participant</span>
+        <button
+          onClick={leaveRoom}
+          className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-full flex items-center gap-2 transition-all shadow-lg shadow-red-900/20"
+        >
+          <PhoneOffIcon className="w-5 h-5" />
+          <span>Leave</span>
+        </button>
       </div>
 
-      {!hasVideo && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
-          <div className="w-24 h-24 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
-            <span className="text-white text-3xl font-bold">P</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
