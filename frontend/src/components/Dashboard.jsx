@@ -17,14 +17,23 @@ const LockIcon = ({ className }) => (
 const MicIcon = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
 );
-const ShareIcon = ({ className }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
-);
 const TrashIcon = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
 );
-const UserIcon = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+const ClockIcon = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+);
+const VideoIcon = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
+);
+const CalendarIcon = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+);
+const FilmIcon = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>
+);
+const TrendingUpIcon = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
 );
 
 // --- Components ---
@@ -48,7 +57,14 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [generatedCode, setGeneratedCode] = useState('J-83K-49D'); 
   const [isPasswordProtected, setIsPasswordProtected] = useState(false);
-  const [waitingRoom, setWaitingRoom] = useState(false); 
+  const [waitingRoom, setWaitingRoom] = useState(false);
+  
+  // Mock data for new components
+  const [recentSessions] = useState([
+    { id: 1, name: 'Team Standup', duration: '45 min', date: '2 hours ago' },
+    { id: 2, name: 'Client Review', duration: '1h 20min', date: 'Yesterday' },
+    { id: 3, name: 'Movie Night', duration: '2h 15min', date: '3 days ago' },
+  ]);
 
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -95,18 +111,21 @@ const Dashboard = () => {
   const handleDeleteRoom = async (e, roomId) => {
     e.stopPropagation(); 
     if(window.confirm("End this session?")) {
-        // API call to delete room
-        alert("End room functionality connected");
+        try {
+          await roomAPI.endRoom(roomId);
+          fetchRooms();
+          alert("Room ended successfully");
+        } catch (error) {
+          console.error("Error ending room:", error);
+        }
     }
   };
 
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-gray-700">
       
-      {/* 1. Header (Navbar) */}
       <Navbar />
 
-      {/* 2. Main Layout - Added padding-top (pt-24) to prevent Navbar overlap */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
         
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -114,10 +133,9 @@ const Dashboard = () => {
           {/* --- LEFT COLUMN --- */}
           <div className="lg:col-span-8 flex flex-col gap-6">
             
-            {/* Block A: Active Rooms & Create Button (Fixed Overlap) */}
+            {/* Active Rooms & Create Button */}
             <div className="bg-[#111] border border-[#222] rounded-3xl p-6 md:p-8 flex flex-col md:flex-row gap-8">
               
-              {/* Left Side: List of Rooms */}
               <div className="flex-1 flex flex-col">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-gray-400 text-sm uppercase tracking-wider font-bold">Active Rooms</h2>
@@ -154,7 +172,6 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {/* Right Side: Create Room Button (Static Position - No Overlap) */}
               <div className="w-full md:w-64 flex-shrink-0">
                   <button 
                     onClick={handleCreateRoom}
@@ -176,7 +193,7 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Block B: Share Your Code */}
+            {/* Share Your Code */}
             <div className="bg-[#111] border border-[#222] rounded-3xl p-8 flex flex-col md:flex-row items-center justify-between gap-8">
               <div className="space-y-3 text-center md:text-left w-full">
                  <h2 className="text-lg text-gray-300 font-medium">Share Your Code</h2>
@@ -194,7 +211,7 @@ const Dashboard = () => {
                        <CopyIcon className="w-3 h-3" /> Copy Code
                     </button>
                     <button 
-                       onClick={() => copyToClipboard(`https://popcornping.com/join/${generatedCode}`)}
+                       onClick={() => copyToClipboard(`${window.location.origin}/room/${generatedCode}`)}
                        className="flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] rounded-lg text-xs text-gray-400 hover:text-white border border-[#333] transition-colors"
                     >
                        <LinkIcon className="w-3 h-3" /> Copy Link
@@ -212,17 +229,41 @@ const Dashboard = () => {
               </div>
             </div>
 
+            {/* NEW: Recent Sessions */}
+            <div className="bg-[#111] border border-[#222] rounded-3xl p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-gray-400 text-sm uppercase tracking-wider font-bold">Recent Sessions</h2>
+                <ClockIcon className="w-5 h-5 text-gray-500" />
+              </div>
+              
+              <div className="space-y-3">
+                {recentSessions.map((session) => (
+                  <div key={session.id} className="flex items-center justify-between p-4 bg-[#1a1a1a] rounded-xl border border-[#2a2a2a] hover:border-gray-600 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600/20 to-blue-600/20 border border-purple-500/30 flex items-center justify-center">
+                        <VideoIcon className="w-5 h-5 text-purple-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-white text-sm font-medium">{session.name}</h3>
+                        <p className="text-gray-500 text-xs">{session.duration}</p>
+                      </div>
+                    </div>
+                    <span className="text-gray-500 text-xs">{session.date}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
           </div>
 
           {/* --- RIGHT COLUMN --- */}
           <div className="lg:col-span-4 flex flex-col gap-6">
             
-            {/* Block C: Room Configuration */}
+            {/* Room Configuration */}
             <div className="bg-[#111] border border-[#222] rounded-3xl p-8 flex flex-col justify-center min-h-[240px]">
                <h2 className="text-gray-400 text-sm mb-6 font-bold uppercase tracking-wider">Room Configuration</h2>
                
                <div className="space-y-6">
-                  {/* Option 1 */}
                   <div className="flex items-center justify-between">
                      <div className="flex items-center gap-3">
                         <LockIcon className="w-5 h-5 text-gray-500" />
@@ -235,7 +276,6 @@ const Dashboard = () => {
                   
                   <div className="h-px bg-[#222] w-full"></div>
 
-                  {/* Option 2 */}
                   <div className="flex items-center justify-between">
                      <div className="flex items-center gap-3">
                         <MicIcon className="w-5 h-5 text-gray-500" />
@@ -248,31 +288,48 @@ const Dashboard = () => {
                </div>
             </div>
 
-            {/* Block D: Share Widget */}
-            <div className="bg-[#111] border border-[#222] rounded-3xl p-8 flex-1 flex flex-col justify-between relative overflow-hidden min-h-[220px]">
-               <div>
-                  <h2 className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-1">Share via Entat</h2>
-                  <p className="text-[11px] text-gray-600">Quick share options</p>
-               </div>
+            {/* NEW: Quick Actions */}
+            <div className="bg-[#111] border border-[#222] rounded-3xl p-8">
+              <h2 className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-6">Quick Actions</h2>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <button className="p-4 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl hover:border-white/20 transition-all group">
+                  <CalendarIcon className="w-6 h-6 text-gray-500 group-hover:text-white transition-colors mb-2" />
+                  <span className="text-xs text-gray-400 group-hover:text-white transition-colors">Schedule</span>
+                </button>
+                
+                <button className="p-4 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl hover:border-white/20 transition-all group">
+                  <FilmIcon className="w-6 h-6 text-gray-500 group-hover:text-white transition-colors mb-2" />
+                  <span className="text-xs text-gray-400 group-hover:text-white transition-colors">Recordings</span>
+                </button>
+              </div>
+            </div>
 
-               <div className="flex items-end justify-between mt-6 relative z-10">
-                  <div className="flex gap-3">
-                     <button className="w-12 h-12 rounded-2xl bg-[#1a1a1a] border border-[#333] flex items-center justify-center text-gray-400 hover:bg-white hover:text-black transition-all">
-                        <ShareIcon className="w-5 h-5" />
-                     </button>
-                     <button className="w-12 h-12 rounded-2xl bg-[#1a1a1a] border border-[#333] flex items-center justify-center text-gray-400 hover:bg-white hover:text-black transition-all">
-                        <UserIcon className="w-5 h-5" />
-                     </button>
-                  </div>
+            {/* NEW: Meeting Analytics */}
+            <div className="bg-[#111] border border-[#222] rounded-3xl p-8">
+               <h2 className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-1">This Week</h2>
+               <p className="text-[11px] text-gray-600 mb-6">Meeting statistics</p>
 
-                  {/* Circular Progress Mockup */}
-                  <div className="relative w-16 h-16 flex items-center justify-center">
-                     <svg className="w-full h-full transform -rotate-90">
-                        <circle cx="32" cy="32" r="26" stroke="#1a1a1a" strokeWidth="4" fill="none" />
-                        <circle cx="32" cy="32" r="26" stroke="white" strokeWidth="4" fill="none" strokeDasharray="163" strokeDashoffset="100" strokeLinecap="round" />
-                     </svg>
-                     <span className="absolute text-sm font-bold text-white">40</span>
-                  </div>
+               <div className="space-y-4">
+                 <div className="flex items-center justify-between">
+                   <span className="text-sm text-gray-400">Total Meetings</span>
+                   <span className="text-2xl font-bold text-white">12</span>
+                 </div>
+                 
+                 <div className="flex items-center justify-between">
+                   <span className="text-sm text-gray-400">Total Hours</span>
+                   <span className="text-2xl font-bold text-white">8.5</span>
+                 </div>
+
+                 <div className="mt-4 pt-4 border-t border-[#222]">
+                   <div className="flex items-center justify-between text-xs">
+                     <span className="text-gray-500">vs last week</span>
+                     <span className="flex items-center gap-1 text-green-400">
+                       <TrendingUpIcon className="w-3 h-3" />
+                       +15%
+                     </span>
+                   </div>
+                 </div>
                </div>
             </div>
 
