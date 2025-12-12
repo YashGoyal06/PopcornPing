@@ -15,6 +15,7 @@ const GoogleIcon = ({ className }) => (
 );
 
 // --- Background Animation Component ---
+// Changed text-white to text-red-500 in the JSX
 function FloatingPaths({ position }) {
   const paths = Array.from({ length: 36 }, (_, i) => ({
     id: i,
@@ -32,7 +33,7 @@ function FloatingPaths({ position }) {
   return (
     <div className="pointer-events-none absolute inset-0">
       <svg
-        className="h-full w-full text-white"
+        className="h-full w-full text-red-500" 
         viewBox="0 0 696 316"
         fill="none"
       >
@@ -71,6 +72,8 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const rightSideImagePath = '../login-illustration.jpg'; 
 
   // Handle Email/Password Login
   const handleEmailLogin = async (e) => {
@@ -137,7 +140,22 @@ export default function Login() {
       {/* --- Right Column: Auth Form --- */}
       <div className="relative flex min-h-screen flex-col justify-center p-8 md:p-12 lg:p-16">
         
-        {/* Background Glow Effects (Right Side) */}
+        {/* === FIXED IMAGE CODE FOR RIGHT SECTION === */}
+        <div className="absolute inset-0 hidden lg:block z-0">
+          <img
+            src={rightSideImagePath}
+            alt="Login Illustration"
+            className="h-full w-full object-cover opacity-20" 
+            onError={(e) => { 
+                e.target.style.display = 'none'; 
+            }}
+          />
+          {/* Dark overlay to ensure text readability */}
+          <div className="absolute inset-0 bg-black/30" />
+        </div>
+        {/* === END OF FIXED IMAGE CODE === */}
+
+        {/* Background Glow Effects (Right Side) - moved behind image */}
         <div aria-hidden="true" className="absolute inset-0 isolate -z-10 overflow-hidden">
           <div className="absolute top-0 right-0 h-[500px] w-[500px] bg-purple-900/10 blur-[100px] rounded-full translate-x-1/2 -translate-y-1/2" />
           <div className="absolute bottom-0 right-0 h-[400px] w-[400px] bg-blue-900/10 blur-[100px] rounded-full translate-x-1/3 translate-y-1/3" />
@@ -146,14 +164,14 @@ export default function Login() {
         {/* Back to Home Button */}
         <button 
           onClick={() => navigate('/')}
-          className="absolute top-8 left-8 md:left-12 inline-flex items-center text-sm font-medium text-gray-400 hover:text-white transition-colors"
+          className="absolute top-8 left-8 md:left-12 inline-flex items-center text-sm font-medium text-gray-400 hover:text-white transition-colors z-20"
         >
           <ChevronLeftIcon className="w-4 h-4 mr-2" />
           Home
         </button>
 
         {/* Form Container */}
-        <div className="mx-auto w-full max-w-sm space-y-8">
+        <div className="mx-auto w-full max-w-sm space-y-8 relative z-20">
           
           {/* Mobile Logo (Visible only on small screens) */}
           <div className="flex items-center gap-2 lg:hidden mb-8">
@@ -162,10 +180,10 @@ export default function Login() {
 
           {/* Headers */}
           <div className="flex flex-col space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight text-white">
+            <h1 className="text-3xl font-bold tracking-tight text-white drop-shadow-lg">
               Sign In or Join Now!
             </h1>
-            <p className="text-gray-400 text-sm">
+            <p className="text-gray-300 text-sm drop-shadow-md">
               Login or create your PopcornPing account.
             </p>
           </div>
@@ -209,7 +227,7 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="w-full h-11 bg-gray-900 border border-gray-800 rounded-md pl-10 pr-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20 transition-all placeholder:text-gray-600"
+                    className="w-full h-11 bg-gray-900/80 border border-gray-800 rounded-md pl-10 pr-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20 transition-all placeholder:text-gray-600"
                   />
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-500">
                     <AtSignIcon className="w-4 h-4" />
@@ -227,7 +245,7 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="w-full h-11 bg-gray-900 border border-gray-800 rounded-md pl-4 pr-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20 transition-all placeholder:text-gray-600"
+                    className="w-full h-11 bg-gray-900/80 border border-gray-800 rounded-md pl-4 pr-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20 transition-all placeholder:text-gray-600"
                   />
                 </div>
               </div>
