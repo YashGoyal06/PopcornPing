@@ -2,8 +2,6 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 // Ensure this path matches your file structure
 import { useAuth } from '../context/AuthContext'; 
-
-// This is the dummy image that will show for EVERY user
 const DUMMY_PROFILE_IMG = "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix";
 
 const Navbar = () => {
