@@ -78,10 +78,10 @@ const Hero = () => {
           <img
             src="/background.jpg"
             alt="Cinema Background"
-            className="w-full h-full object-cover opacity-50"
+            className="w-full h-full object-cover opacity-60"
             onError={(e) => { e.target.style.display = 'none'; }}
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-black/90"></div>
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/60"></div>
         </motion.div>
 
         {/* --- 2. Animated Glowing Orbs --- */}
@@ -99,7 +99,7 @@ const Hero = () => {
           <motion.div custom={1.0} variants={orbVariants} initial="hidden" animate="visible" className="absolute bottom-32 right-20 w-64 h-64 bg-pink-500/10 rounded-full blur-[100px] animate-float-slower" />
         </div>
 
-        {/* --- CSS for Continuous Float Animations --- */}
+        {/* CSS for Continuous Float Animations --- */}
         <style jsx>{`
           @keyframes float-slow {
             0%, 100% { transform: translate(0, 0); }
@@ -192,7 +192,7 @@ const Hero = () => {
               onClick={() => navigate('/login')}
               className="group relative px-12 py-5 bg-white text-black rounded-full font-bold tracking-[0.2em] uppercase overflow-hidden shadow-[0_0_15px_rgba(255,255,255,0.3)] transition-all"
             >
-              <span className="relative z-10">Start Your Scene</span>
+              <span className="relative z-10">Let's Enjoy!</span>
               {/* Button Fill Animation */}
               <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-600 opacity-0 group-hover:opacity-10 transition-opacity duration-300"></div>
             </motion.button>
