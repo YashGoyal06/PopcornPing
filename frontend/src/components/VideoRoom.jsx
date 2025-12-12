@@ -10,7 +10,7 @@ const MicIcon = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
 );
 const MicOffIcon = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="1" x2="23" y1="1" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" x2="12" y1="19" y2="23"/></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="1" x2="23" y1="1" y2="23" stroke="currentColor"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" stroke="currentColor"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" stroke="currentColor"/><line x1="12" x2="12" y1="19" y2="23" stroke="currentColor"/></svg>
 );
 const VideoIcon = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
@@ -50,26 +50,27 @@ const VideoRoom = () => {
     fetchRoomInfo();
     initializeMedia();
 
-    // FIXED: Proper cleanup when component unmounts
     return () => {
-      cleanupConnection();
+      console.log("Component unmounting. Running cleanup.");
+      cleanupConnection(); 
     };
-  }, []);
+  }, []); 
 
-  // FIXED: Comprehensive cleanup function
+  // Comprehensive cleanup function 
   const cleanupConnection = () => {
-    console.log('Cleaning up video room connection...');
     
-    // Stop all media tracks
+    if (userVideo.current) {
+      userVideo.current.srcObject = null;
+    }
+
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => {
-        track.stop();
+        track.stop(); 
         console.log(`Stopped ${track.kind} track`);
       });
       streamRef.current = null;
     }
-    
-    // Stop screen sharing tracks
+
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach(track => {
         track.stop();
@@ -78,7 +79,6 @@ const VideoRoom = () => {
       screenStreamRef.current = null;
     }
     
-    // Destroy all peer connections
     peersRef.current.forEach(({ peer }) => {
       if (peer) {
         peer.destroy();
@@ -87,16 +87,9 @@ const VideoRoom = () => {
     peersRef.current = [];
     setPeers([]);
     
-    // Disconnect socket
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
-      console.log('Socket disconnected');
-    }
-    
-    // Clear video element
-    if (userVideo.current) {
-      userVideo.current.srcObject = null;
     }
   };
 
@@ -286,7 +279,7 @@ const VideoRoom = () => {
     setTimeout(() => setShowCopied(false), 2000);
   };
 
-  // FIXED: Proper leave room function with full cleanup
+  // Function called when user clicks the "Leave" button
   const leaveRoom = async () => {
     // Cleanup all connections first
     cleanupConnection();
@@ -298,13 +291,13 @@ const VideoRoom = () => {
   return (
     <div className="min-h-screen bg-black flex flex-col relative overflow-hidden">
       
-      {/* Background Gradient Effects */}
+      {/* Background Gradient Effects (omitted for brevity) */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-900/10 blur-[150px] rounded-full"></div>
         <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-900/10 blur-[150px] rounded-full"></div>
       </div>
 
-      {/* Header */}
+      {/* Header (omitted for brevity) */}
       <div className="relative z-10 border-b border-gray-800/50 backdrop-blur-sm bg-black/30">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -340,23 +333,22 @@ const VideoRoom = () => {
       <div className="relative flex-1 p-6 z-10">
         <div className={`h-full ${peers.length > 0 ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : 'flex items-center justify-center'}`}>
           
-          {/* Your Video - FIXED: Added style to prevent mirror effect */}
+          {/* Your Video */}
           <div className="relative bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] rounded-2xl overflow-hidden border border-gray-800/50 shadow-2xl aspect-video">
             <video
               ref={userVideo}
               autoPlay
               muted
               playsInline
-              style={{ transform: 'scaleX(1)' }} /* FIXED: Removed mirror effect */
+              style={{ transform: 'scaleX(-1)' }} 
               className="w-full h-full object-cover"
             />
             
-            {/* User Label */}
+            {/* User Label and Indicators (omitted for brevity) */}
             <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-gray-700/50">
               <span className="text-white text-sm font-medium">You {isScreenSharing && '(Sharing)'}</span>
             </div>
             
-            {/* Video Off Placeholder */}
             {isVideoOff && (
               <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
                 <div className="w-24 h-24 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
@@ -367,7 +359,6 @@ const VideoRoom = () => {
               </div>
             )}
 
-            {/* Muted Indicator */}
             {isMuted && (
               <div className="absolute top-4 right-4 bg-red-500/90 backdrop-blur-md p-2 rounded-lg">
                 <MicOffIcon className="w-4 h-4 text-white" />
@@ -382,12 +373,12 @@ const VideoRoom = () => {
         </div>
       </div>
 
-      {/* Controls Bar */}
+      {/* Controls Bar (omitted for brevity) */}
       <div className="relative z-10 border-t border-gray-800/50 backdrop-blur-sm bg-black/30">
         <div className="max-w-4xl mx-auto px-6 py-6">
           <div className="flex items-center justify-center gap-4">
             
-            {/* Mute Button */}
+            {/* Mute Button (omitted for brevity) */}
             <button
               onClick={toggleMute}
               className={`p-4 rounded-full transition-all ${
@@ -404,7 +395,7 @@ const VideoRoom = () => {
               )}
             </button>
 
-            {/* Video Button */}
+            {/* Video Button (omitted for brevity) */}
             <button
               onClick={toggleVideo}
               className={`p-4 rounded-full transition-all ${
@@ -421,7 +412,7 @@ const VideoRoom = () => {
               )}
             </button>
 
-            {/* Screen Share Button */}
+            {/* Screen Share Button (omitted for brevity) */}
             <button
               onClick={shareScreen}
               className={`p-4 rounded-full transition-all ${
@@ -436,7 +427,7 @@ const VideoRoom = () => {
 
             <div className="w-px h-10 bg-gray-800 mx-2"></div>
 
-            {/* Leave Button */}
+            {/* Leave Button - Calls the cleanup function and navigates */}
             <button
               onClick={leaveRoom}
               className="px-6 py-4 bg-red-600 hover:bg-red-700 text-white rounded-full transition-all font-medium shadow-lg shadow-red-600/30 flex items-center gap-2"
@@ -451,7 +442,7 @@ const VideoRoom = () => {
   );
 };
 
-// Peer Video Component - FIXED: Also removed mirror effect
+// Peer Video Component 
 const Video = ({ peer, peerID }) => {
   const ref = useRef();
   const [hasVideo, setHasVideo] = useState(true);
@@ -460,7 +451,6 @@ const Video = ({ peer, peerID }) => {
     peer.on('stream', (stream) => {
       ref.current.srcObject = stream;
       
-      // Check if stream has video
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
         setHasVideo(videoTrack.enabled);
@@ -475,16 +465,15 @@ const Video = ({ peer, peerID }) => {
         ref={ref} 
         autoPlay 
         playsInline 
-        style={{ transform: 'scaleX(1)' }} /* FIXED: Removed mirror effect for peers too */
+        style={{ transform: 'scaleX(1)' }} 
         className="w-full h-full object-cover" 
       />
       
-      {/* Peer Label */}
+      {/* Peer Label and Placeholder (omitted for brevity) */}
       <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-gray-700/50">
         <span className="text-white text-sm font-medium">Participant</span>
       </div>
 
-      {/* Video Off Placeholder */}
       {!hasVideo && (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
           <div className="w-24 h-24 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
