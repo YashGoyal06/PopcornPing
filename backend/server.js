@@ -7,12 +7,13 @@ const passport = require('./config/passport');
 const connectDB = require('./config/database');
 const authRoutes = require('./routes/auth');
 const roomRoutes = require('./routes/room');
+const path = require('path'); // Added path module
 
 const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
   cors: {
-    origin: process.env.FRONTEND_URL,
+    origin: process.env.FRONTEND_URL, // Ensure this ENV is set to your HF Space URL
     credentials: true,
   },
 });
@@ -56,6 +57,16 @@ app.use('/api/rooms', roomRoutes);
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
 });
+
+// --- NEW: Serve Frontend Static Files ---
+// 1. Serve the static files from the React build folder
+app.use(express.static(path.join(__dirname, '../frontend/build')));
+
+// 2. Handle React routing, return all requests to React app
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+});
+// ----------------------------------------
 
 // Store active rooms and users
 const rooms = {};
@@ -146,7 +157,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Something went wrong!' });
 });
 
-const PORT = process.env.PORT || 5001;
+// Updated Port for Hugging Face (Default 7860)
+const PORT = process.env.PORT || 7860;
 
 http.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
