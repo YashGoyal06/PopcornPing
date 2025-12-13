@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Hero from './components/Hero';
@@ -14,6 +14,7 @@ function OAuthHandler() {
   const navigate = useNavigate();
   const location = useLocation();
   const { checkAuth } = useAuth();
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     const handleOAuthRedirect = async () => {
@@ -27,25 +28,50 @@ function OAuthHandler() {
       
       // Check for successful OAuth
       if (params.get('auth') === 'success') {
+        if (isProcessing) {
+          console.log('⏳ Already processing OAuth, skipping...');
+          return;
+        }
+        
+        setIsProcessing(true);
         console.log('✅ OAuth success detected, checking authentication...');
         
-        // Small delay to ensure cookie is set
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Give cookies time to be set
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         try {
-          // Verify authentication with backend
+          console.log('📡 Calling checkAuth...');
           const isAuthenticated = await checkAuth();
           
+          console.log('🔍 checkAuth result:', isAuthenticated);
+          
           if (isAuthenticated) {
-            console.log('✅ Authentication verified, navigating to dashboard');
+            console.log('✅ Authentication verified! Navigating to dashboard...');
+            // Clean up URL before navigating
+            window.history.replaceState({}, '', location.pathname);
             navigate('/dashboard', { replace: true });
           } else {
-            console.error('❌ Authentication verification failed');
-            navigate('/login?error=verification_failed', { replace: true });
+            console.error('❌ checkAuth returned false');
+            console.log('🔄 Retrying in 1 second...');
+            
+            // Retry once after a delay
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const retryAuth = await checkAuth();
+            
+            if (retryAuth) {
+              console.log('✅ Retry successful! Navigating to dashboard...');
+              window.history.replaceState({}, '', location.pathname);
+              navigate('/dashboard', { replace: true });
+            } else {
+              console.error('❌ Retry failed. Authentication verification failed');
+              navigate('/login?error=verification_failed', { replace: true });
+            }
           }
         } catch (error) {
           console.error('❌ Error verifying authentication:', error);
           navigate('/login?error=verification_error', { replace: true });
+        } finally {
+          setIsProcessing(false);
         }
       }
       
@@ -54,11 +80,13 @@ function OAuthHandler() {
         const errorMessage = params.get('error');
         console.error('❌ OAuth error detected:', errorMessage);
         navigate(`/login?error=${errorMessage}`, { replace: true });
+        // Clean up URL
+        window.history.replaceState({}, '', location.pathname);
       }
     };
 
     handleOAuthRedirect();
-  }, [location.search, navigate, checkAuth]);
+  }, [location.search, navigate, checkAuth, isProcessing]);
 
   return null;
 }
