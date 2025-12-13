@@ -21,48 +21,97 @@ export const AuthProvider = ({ children }) => {
 
   const checkAuth = async () => {
     try {
+      console.log('🔍 Checking authentication status...');
       const response = await authAPI.getCurrentUser();
-      const userData = response.data.user;
-      setUser({
-        ...userData,
-        username: userData.username || userData.name || 'User',
-        avatar: userData.avatar || ''
-      });
+      
+      console.log('📡 Auth response:', response);
+      
+      if (response.data && response.data.user) {
+        const userData = response.data.user;
+        const formattedUser = {
+          ...userData,
+          username: userData.username || userData.name || 'User',
+          avatar: userData.avatar || ''
+        };
+        
+        console.log('✅ User authenticated:', formattedUser.email);
+        setUser(formattedUser);
+        setLoading(false);
+        return true; // ✅ CRITICAL: Must return true
+      } else {
+        console.log('❌ No user data in response');
+        setUser(null);
+        setLoading(false);
+        return false;
+      }
     } catch (error) {
+      console.error('❌ Authentication check failed:', {
+        status: error.response?.status,
+        message: error.message,
+        data: error.response?.data
+      });
+      
       setUser(null);
-    } finally {
       setLoading(false);
+      return false;
     }
   };
 
   const login = async (credentials) => {
-    const response = await authAPI.login(credentials);
-    const userData = response.data.user;
-    setUser({
-      ...userData,
-      username: userData.username || userData.name || 'User',
-      avatar: userData.avatar || ''
-    });
-    return response.data;
+    try {
+      console.log('🔐 Logging in with email/password...');
+      const response = await authAPI.login(credentials);
+      const userData = response.data.user;
+      const formattedUser = {
+        ...userData,
+        username: userData.username || userData.name || 'User',
+        avatar: userData.avatar || ''
+      };
+      
+      console.log('✅ Login successful:', formattedUser.email);
+      setUser(formattedUser);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Login failed:', error.response?.data?.message || error.message);
+      throw error;
+    }
   };
 
   const register = async (userData) => {
-    const response = await authAPI.register(userData);
-    const user = response.data.user;
-    setUser({
-      ...user,
-      username: user.username || user.name || 'User',
-      avatar: user.avatar || ''
-    });
-    return response.data;
+    try {
+      console.log('📝 Registering new user...');
+      const response = await authAPI.register(userData);
+      const user = response.data.user;
+      const formattedUser = {
+        ...user,
+        username: user.username || user.name || 'User',
+        avatar: user.avatar || ''
+      };
+      
+      console.log('✅ Registration successful:', formattedUser.email);
+      setUser(formattedUser);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Registration failed:', error.response?.data?.message || error.message);
+      throw error;
+    }
   };
 
   const logout = async () => {
-    await authAPI.logout();
-    setUser(null);
+    try {
+      console.log('👋 Logging out...');
+      await authAPI.logout();
+      setUser(null);
+      console.log('✅ Logout successful');
+    } catch (error) {
+      console.error('❌ Logout failed:', error);
+      // Still clear user even if API call fails
+      setUser(null);
+    }
   };
 
   const googleLogin = () => {
+    console.log('🔗 Redirecting to Google OAuth...');
     authAPI.googleLogin();
   };
 
