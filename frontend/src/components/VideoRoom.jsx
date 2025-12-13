@@ -5,7 +5,7 @@ import Peer from 'simple-peer';
 import { roomAPI } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
-// --- Icons ---
+// --- Icons (Unchanged) ---
 const MicIcon = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
 );
@@ -31,13 +31,15 @@ const PinIcon = ({ className, filled }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>
 );
 
-// --- Video Player Component ---
+// --- Video Player Component (Fixed AutoPlay) ---
 const VideoPlayer = ({ stream, isLocal = false, onPin, isPinned, label }) => {
   const ref = useRef();
 
   useEffect(() => {
     if (ref.current && stream) {
       ref.current.srcObject = stream;
+      // FIX: Force play to ensure video starts
+      ref.current.play().catch(err => console.error("Video play failed:", err));
     }
   }, [stream]);
 
@@ -92,14 +94,25 @@ const VideoRoom = () => {
   const socketRef = useRef();
   const peersRef = useRef([]); // Keep track of peers for cleanup
   const userStreamRef = useRef();
-  const screenStreamRef = useRef(); // Corrected declaration
-  const isMounted = useRef(true); // Track mount status
+  const screenStreamRef = useRef(); 
+  const isMounted = useRef(true); 
+
+  // --- Configuration ---
+  // FIX: Explicit ICE Servers to help with connectivity
+  const peerConfig = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+    ]
+  };
 
   // --- Initialization & Cleanup ---
   useEffect(() => {
     isMounted.current = true;
 
-    // Prevent accidental refresh
     const handleBeforeUnload = (e) => {
       e.preventDefault();
       e.returnValue = '';
@@ -152,7 +165,6 @@ const VideoRoom = () => {
     });
     peersRef.current = [];
     
-    // Clear state only if mounted to avoid react warnings
     if (isMounted.current) {
         setPeers([]);
         setRemoteStreams([]);
@@ -185,14 +197,11 @@ const VideoRoom = () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       
-      // CRITICAL: Check if still mounted after async call
       if (!isMounted.current) {
-          // If unmounted during getUserMedia, immediately stop these tracks
           stream.getTracks().forEach(t => t.stop());
           return;
       }
 
-      // If there was an old stream pending in ref (race condition), stop it
       if (userStreamRef.current) {
          userStreamRef.current.getTracks().forEach(t => t.stop());
       }
@@ -203,9 +212,8 @@ const VideoRoom = () => {
       socketRef.current = io(process.env.REACT_APP_SOCKET_URL);
       socketRef.current.emit('join-room', roomId, user.id);
 
-      // --- Socket Events ---
-
       socketRef.current.on('user-connected', (userId) => {
+        console.log("User connected:", userId);
         if (!isMounted.current) return;
         const peer = createPeer(userId, socketRef.current.id, stream);
         peersRef.current.push({ peerID: userId, peer });
@@ -213,6 +221,7 @@ const VideoRoom = () => {
       });
 
       socketRef.current.on('user-disconnected', (userId) => {
+        console.log("User disconnected:", userId);
         if (!isMounted.current) return;
         const peerObj = peersRef.current.find(p => p.peerID === userId);
         if (peerObj && peerObj.peer) peerObj.peer.destroy();
@@ -223,6 +232,7 @@ const VideoRoom = () => {
       });
 
       socketRef.current.on('offer', (offer, id) => {
+        console.log("Received Offer from:", id);
         if (!isMounted.current) return;
         const peer = addPeer(offer, id, stream);
         peersRef.current.push({ peerID: id, peer });
@@ -230,6 +240,7 @@ const VideoRoom = () => {
       });
 
       socketRef.current.on('answer', (answer, id) => {
+        console.log("Received Answer from:", id);
         const p = peersRef.current.find(p => p.peerID === id);
         if (p) p.peer.signal(answer);
       });
@@ -239,17 +250,13 @@ const VideoRoom = () => {
         if (p) p.peer.signal(candidate);
       });
 
-      // Notification only - stream handling is done via peer.on('stream')
       socketRef.current.on('screen-share-started', (id) => {
         console.log(`User ${id} started screen sharing`);
       });
 
       socketRef.current.on('screen-share-stopped', (id) => {
         console.log(`User ${id} stopped screen sharing`);
-        setRemoteStreams(prev => prev.filter(s => {
-           // Keep streams; simple-peer usually removes track automatically or we can add logic here if needed
-           return true; 
-        }));
+        setRemoteStreams(prev => prev.filter(s => true)); 
       });
 
     } catch (error) {
@@ -265,6 +272,7 @@ const VideoRoom = () => {
     const peer = new Peer({
       initiator: true,
       trickle: false,
+      config: peerConfig, // FIX: Use explicit config
       stream,
     });
 
@@ -273,7 +281,12 @@ const VideoRoom = () => {
     });
 
     peer.on('stream', remoteStream => {
+      console.log("Received Stream (Initiator)", remoteStream.id);
       handleRemoteStream(remoteStream, userToSignal);
+    });
+
+    peer.on('error', err => {
+        console.error("Peer Error (Initiator):", err);
     });
 
     return peer;
@@ -283,6 +296,7 @@ const VideoRoom = () => {
     const peer = new Peer({
       initiator: false,
       trickle: false,
+      config: peerConfig, // FIX: Use explicit config
       stream,
     });
 
@@ -291,7 +305,12 @@ const VideoRoom = () => {
     });
 
     peer.on('stream', remoteStream => {
+      console.log("Received Stream (Receiver)", remoteStream.id);
       handleRemoteStream(remoteStream, callerID);
+    });
+
+    peer.on('error', err => {
+        console.error("Peer Error (Receiver):", err);
     });
 
     peer.signal(incomingSignal);
@@ -333,14 +352,12 @@ const VideoRoom = () => {
       screenStreamRef.current = stream;
       setScreenStream(stream);
       setIsScreenSharing(true);
-      setPinnedStreamId('local-screen'); // Auto-pin my screen
+      setPinnedStreamId('local-screen'); 
 
-      // Add stream to all peers
       peersRef.current.forEach(({ peer }) => {
         peer.addStream(stream);
       });
 
-      // Handle native stop button
       stream.getVideoTracks()[0].onended = () => stopScreenShare();
       
       socketRef.current.emit('screen-share-started', roomId);
@@ -351,18 +368,15 @@ const VideoRoom = () => {
 
   const stopScreenShare = () => {
     if (screenStreamRef.current) {
-      // Remove stream from peers
       peersRef.current.forEach(({ peer }) => {
         peer.removeStream(screenStreamRef.current);
       });
-      // Stop tracks
       screenStreamRef.current.getTracks().forEach(t => t.stop());
       screenStreamRef.current = null;
     }
     setScreenStream(null);
     setIsScreenSharing(false);
     
-    // Unpin if necessary
     setPinnedStreamId(prev => (prev === 'local-screen' ? null : prev));
     
     socketRef.current.emit('screen-share-stopped', roomId);
@@ -385,17 +399,14 @@ const VideoRoom = () => {
   const getAllStreams = () => {
     const streams = [];
     
-    // 1. Local Camera
     if (userStream) {
       streams.push({ id: 'local-cam', stream: userStream, isLocal: true, label: 'You' });
     }
     
-    // 2. Local Screen
     if (screenStream) {
       streams.push({ id: 'local-screen', stream: screenStream, isLocal: true, label: 'Your Screen' });
     }
     
-    // 3. Remote Streams
     remoteStreams.forEach(rs => {
       streams.push({ 
         id: rs.id, 
@@ -446,7 +457,7 @@ const VideoRoom = () => {
                 isLocal={pinnedStream.isLocal}
                 label={pinnedStream.label}
                 isPinned={true}
-                onPin={() => setPinnedStreamId(null)} // Unpin
+                onPin={() => setPinnedStreamId(null)} 
               />
             </div>
 
