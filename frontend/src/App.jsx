@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useSearchParams } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
 import Hero from './components/Hero';
 import Dashboard from './components/Dashboard';
 import VideoRoom from './components/VideoRoom';
@@ -9,94 +9,46 @@ import Snippets from './components/Snippets';
 import Footer from './components/Footer';
 import Login from './components/Login';
 
-// OAuth Handler Component
+// --- OAuth Handler Component (FIXED) ---
+// This component simply detects the "success" flag from the backend
+// and redirects to the dashboard. The AuthContext & ProtectedRoute
+// will handle the "loading" and "user fetching" automatically.
 function OAuthHandler() {
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { checkAuth } = useAuth();
-  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    const handleOAuthRedirect = async () => {
-      const params = new URLSearchParams(location.search);
-      
-      console.log('🔍 OAuthHandler: Checking URL params...', {
-        auth: params.get('auth'),
-        error: params.get('error'),
-        fullURL: window.location.href
-      });
-      
-      // Check for successful OAuth
-      if (params.get('auth') === 'success') {
-        if (isProcessing) {
-          console.log('⏳ Already processing OAuth, skipping...');
-          return;
-        }
-        
-        setIsProcessing(true);
-        console.log('✅ OAuth success detected, checking authentication...');
-        
-        // Give cookies time to be set
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        try {
-          console.log('📡 Calling checkAuth...');
-          const isAuthenticated = await checkAuth();
-          
-          console.log('🔍 checkAuth result:', isAuthenticated);
-          
-          if (isAuthenticated) {
-            console.log('✅ Authentication verified! Navigating to dashboard...');
-            // Clean up URL before navigating
-            window.history.replaceState({}, '', location.pathname);
-            navigate('/dashboard', { replace: true });
-          } else {
-            console.error('❌ checkAuth returned false');
-            console.log('🔄 Retrying in 1 second...');
-            
-            // Retry once after a delay
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const retryAuth = await checkAuth();
-            
-            if (retryAuth) {
-              console.log('✅ Retry successful! Navigating to dashboard...');
-              window.history.replaceState({}, '', location.pathname);
-              navigate('/dashboard', { replace: true });
-            } else {
-              console.error('❌ Retry failed. Authentication verification failed');
-              navigate('/login?error=verification_failed', { replace: true });
-            }
-          }
-        } catch (error) {
-          console.error('❌ Error verifying authentication:', error);
-          navigate('/login?error=verification_error', { replace: true });
-        } finally {
-          setIsProcessing(false);
-        }
-      }
-      
-      // Check for OAuth errors
-      if (params.get('error')) {
-        const errorMessage = params.get('error');
-        console.error('❌ OAuth error detected:', errorMessage);
-        navigate(`/login?error=${errorMessage}`, { replace: true });
-        // Clean up URL
-        window.history.replaceState({}, '', location.pathname);
-      }
-    };
+    const authStatus = searchParams.get('auth');
+    const errorStatus = searchParams.get('error');
 
-    handleOAuthRedirect();
-  }, [location.search, navigate, checkAuth, isProcessing]);
+    // 1. Success Case
+    if (authStatus === 'success') {
+      // The backend has set the cookie. We just need to go to the dashboard.
+      // The ProtectedRoute will see we are "loading", wait for AuthContext
+      // to fetch the user, and then let us in.
+      navigate('/dashboard', { replace: true });
+    }
+
+    // 2. Error Case
+    if (errorStatus) {
+      console.error('OAuth Error:', errorStatus);
+      navigate(`/login?error=${errorStatus}`, { replace: true });
+    }
+
+  }, [searchParams, navigate]);
 
   return null;
 }
 
+// --- Main Routes ---
 function AppRoutes() {
   return (
     <>
       <OAuthHandler />
       <Routes>
         <Route path="/login" element={<Login />} />
+        
+        {/* Public Landing Page */}
         <Route
           path="/"
           element={
@@ -107,6 +59,8 @@ function AppRoutes() {
             </>
           }
         />
+
+        {/* Protected Dashboard */}
         <Route
           path="/dashboard"
           element={
@@ -115,6 +69,8 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
+        {/* Protected Video Room */}
         <Route
           path="/room/:roomId"
           element={
@@ -128,6 +84,7 @@ function AppRoutes() {
   );
 }
 
+// --- Main App Component ---
 function App() {
   return (
     <AuthProvider>
