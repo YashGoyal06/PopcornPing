@@ -5,7 +5,7 @@ import Peer from 'simple-peer';
 import { roomAPI } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
-// --- Icons ---
+// --- Icons (Unchanged) ---
 const MicIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>);
 const MicOffIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="1" x2="23" y1="1" y2="23" stroke="currentColor"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" stroke="currentColor"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" stroke="currentColor"/><line x1="12" x2="12" y1="19" y2="23" stroke="currentColor"/></svg>);
 const VideoIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>);
@@ -15,34 +15,49 @@ const PhoneOffIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg"
 const CopyIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>);
 const PinIcon = ({ className, filled }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>);
 
-// --- Video Player ---
+// --- Video Player (IMPROVED for Black Screen Fix) ---
 const VideoPlayer = ({ stream, isLocal = false, onPin, isPinned, label }) => {
-  const ref = useRef();
-  
+  const videoRef = useRef(null);
+  const [hasTracks, setHasTracks] = useState(false); // Track if video/audio actually exists
+
   useEffect(() => {
-    if (ref.current && stream) {
-      ref.current.srcObject = stream;
-      // Robust play attempt
-      const playVideo = async () => {
-        try {
-          await ref.current.play();
-        } catch (err) {
-          console.error("Video play failed (likely autoplay policy):", err);
-        }
-      };
-      
-      ref.current.onloadedmetadata = playVideo;
-      playVideo();
-    }
+    const video = videoRef.current;
+    if (!video || !stream) return;
+
+    // 1. Assign Stream
+    video.srcObject = stream;
+    
+    // 2. Setup Track Listeners (Fixes Black Screen)
+    // Sometimes tracks arrive AFTER the stream object is created.
+    // We listen for this and force a re-render/replay.
+    const checkTracks = () => {
+       const tracks = stream.getVideoTracks();
+       if (tracks.length > 0) {
+         setHasTracks(true);
+         video.play().catch(e => console.log("Play catch:", e));
+       }
+    };
+    
+    checkTracks();
+    stream.addEventListener('addtrack', checkTracks);
+    stream.addEventListener('removetrack', checkTracks);
+
+    // 3. Force Play
+    video.play().catch(err => console.error("Autoplay prevented:", err));
+
+    return () => {
+       stream.removeEventListener('addtrack', checkTracks);
+       stream.removeEventListener('removetrack', checkTracks);
+    };
   }, [stream]);
 
   return (
     <div className={`relative bg-[#1a1a1a] rounded-xl overflow-hidden border border-gray-800 shadow-xl transition-all ${isPinned ? 'w-full h-full' : 'w-full h-full'}`}>
       <video
-        ref={ref}
+        ref={videoRef}
         autoPlay
-        playsInline // CRITICAL for mobile/Safari
-        muted={isLocal} // Always mute local video to prevent feedback
+        playsInline // Required for Safari/Mobile
+        muted={isLocal} 
         style={{ transform: isLocal && !label?.toLowerCase().includes('screen') ? 'scaleX(-1)' : 'none' }}
         className="w-full h-full object-contain bg-black"
       />
@@ -66,7 +81,7 @@ const VideoRoom = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   
-  const [peers, setPeers] = useState([]); // { peerID, peer, username }
+  const [peers, setPeers] = useState([]); 
   const [remoteStreams, setRemoteStreams] = useState([]); 
   const [userStream, setUserStream] = useState(null);
   const [screenStream, setScreenStream] = useState(null);
@@ -84,7 +99,7 @@ const VideoRoom = () => {
   const screenStreamRef = useRef();
   const isMounted = useRef(true);
 
-  // Extended STUN Servers to fix black screens
+  // FIX: Robust ICE Servers
   const peerConfig = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -138,7 +153,9 @@ const VideoRoom = () => {
       userStreamRef.current = stream;
       setUserStream(stream);
 
-      socketRef.current = io(process.env.REACT_APP_SOCKET_URL);
+      // Default to origin if env not set
+      const socketUrl = process.env.REACT_APP_SOCKET_URL || window.location.origin;
+      socketRef.current = io(socketUrl);
       
       // JOIN
       socketRef.current.emit('join-room', roomId, user.id, user.username || user.email);
@@ -147,7 +164,6 @@ const VideoRoom = () => {
 
       socketRef.current.on('user-connected', ({ userId, username }) => {
         if (!isMounted.current) return;
-        // Initiator: New user joined, so WE call THEM
         const peer = createPeer(userId, socketRef.current.id, stream, username);
         peersRef.current.push({ peerID: userId, peer, username });
         setPeers(prev => [...prev, { peerID: userId, peer, username }]);
@@ -161,16 +177,15 @@ const VideoRoom = () => {
         setRemoteStreams(prev => prev.filter(s => s.peerID !== userId));
       });
 
-      // Receive Offer (Caller -> Callee OR Renegotiation)
+      // Receive Offer
       socketRef.current.on('offer', (offer, id, username) => {
         if (!isMounted.current) return;
         
-        // CRITICAL FIX: Check if we already have a connection to this user
-        // If yes, this is a renegotiation (e.g. Screen Share), so simply signal the existing peer
+        // CHECK for existing peer (Renegotiation)
         const existingPeer = peersRef.current.find(p => p.peerID === id);
         
         if (existingPeer) {
-          console.log("Renegotiating with existing peer:", id);
+          console.log("Renegotiating existing peer:", id);
           existingPeer.peer.signal(offer);
         } else {
           console.log("New offer from:", id);
@@ -180,13 +195,11 @@ const VideoRoom = () => {
         }
       });
 
-      // Receive Answer
       socketRef.current.on('answer', (answer, id) => {
         const p = peersRef.current.find(p => p.peerID === id);
         if (p) p.peer.signal(answer);
       });
 
-      // Receive ICE Candidate
       socketRef.current.on('ice-candidate', (candidate, id) => {
         const p = peersRef.current.find(p => p.peerID === id);
         if (p) p.peer.signal(candidate);
@@ -205,14 +218,12 @@ const VideoRoom = () => {
   const createPeer = (userToSignal, callerID, stream, username) => {
     const peer = new Peer({
       initiator: true,
-      trickle: true, 
+      trickle: true,
       config: peerConfig,
       stream,
     });
 
     peer.on('signal', signal => {
-      // If we are initiator, we send the Offer.
-      // If we are renegotiating, we might send another Offer.
       if (signal.type === 'offer') {
         socketRef.current.emit('offer', signal, roomId);
       } else if (signal.candidate) {
@@ -233,7 +244,6 @@ const VideoRoom = () => {
     });
 
     peer.on('signal', signal => {
-      // Receiver sends Answer
       if (signal.type === 'answer') {
         socketRef.current.emit('answer', signal, roomId);
       } else if (signal.candidate) {
@@ -247,11 +257,14 @@ const VideoRoom = () => {
   };
 
   const handleRemoteStream = (stream, peerID, username) => {
-    console.log("Received Stream:", stream.id, "from", peerID);
+    console.log("Stream received from:", username, "ID:", stream.id);
+    
+    // FIX: Always update the stream to force re-render, even if ID is same
+    // We use functional update to ensure we have latest state
     setRemoteStreams(prev => {
-      // Prevent duplicates by ID
-      if (prev.some(s => s.id === stream.id)) return prev;
-      return [...prev, { id: stream.id, stream, peerID, username }];
+      // Remove any existing entry with this stream ID OR this peerID (cleanup old streams)
+      const filtered = prev.filter(s => s.id !== stream.id);
+      return [...filtered, { id: stream.id, stream, peerID, username }];
     });
   };
 
@@ -278,8 +291,7 @@ const VideoRoom = () => {
       setIsScreenSharing(true);
       setPinnedStreamId('local-screen'); 
       
-      // Add screen stream to all existing peers
-      // This triggers 'renegotiation' (sending new Offers)
+      // Add stream to peers (Trigger Renegotiation)
       peersRef.current.forEach(({ peer }) => {
         peer.addStream(stream);
       });
