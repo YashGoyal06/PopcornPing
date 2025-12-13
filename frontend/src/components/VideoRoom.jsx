@@ -18,11 +18,21 @@ const PinIcon = ({ className, filled }) => (<svg xmlns="http://www.w3.org/2000/s
 // --- Video Player ---
 const VideoPlayer = ({ stream, isLocal = false, onPin, isPinned, label }) => {
   const ref = useRef();
+  
   useEffect(() => {
     if (ref.current && stream) {
       ref.current.srcObject = stream;
-      // Force play to prevent frozen/black frames
-      ref.current.play().catch(err => console.log('Autoplay prevented:', err));
+      // Robust play attempt
+      const playVideo = async () => {
+        try {
+          await ref.current.play();
+        } catch (err) {
+          console.error("Video play failed (likely autoplay policy):", err);
+        }
+      };
+      
+      ref.current.onloadedmetadata = playVideo;
+      playVideo();
     }
   }, [stream]);
 
@@ -31,8 +41,8 @@ const VideoPlayer = ({ stream, isLocal = false, onPin, isPinned, label }) => {
       <video
         ref={ref}
         autoPlay
-        playsInline
-        muted={isLocal} 
+        playsInline // CRITICAL for mobile/Safari
+        muted={isLocal} // Always mute local video to prevent feedback
         style={{ transform: isLocal && !label?.toLowerCase().includes('screen') ? 'scaleX(-1)' : 'none' }}
         className="w-full h-full object-contain bg-black"
       />
@@ -74,10 +84,13 @@ const VideoRoom = () => {
   const screenStreamRef = useRef();
   const isMounted = useRef(true);
 
-  // STUN Servers for network connectivity
+  // Extended STUN Servers to fix black screens
   const peerConfig = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
       { urls: 'stun:global.stun.twilio.com:3478' }
     ]
   };
@@ -127,14 +140,14 @@ const VideoRoom = () => {
 
       socketRef.current = io(process.env.REACT_APP_SOCKET_URL);
       
-      // JOIN: Send username along with ID
+      // JOIN
       socketRef.current.emit('join-room', roomId, user.id, user.username || user.email);
 
       // --- Socket Events ---
 
       socketRef.current.on('user-connected', ({ userId, username }) => {
         if (!isMounted.current) return;
-        // Pass username to createPeer
+        // Initiator: New user joined, so WE call THEM
         const peer = createPeer(userId, socketRef.current.id, stream, username);
         peersRef.current.push({ peerID: userId, peer, username });
         setPeers(prev => [...prev, { peerID: userId, peer, username }]);
@@ -148,21 +161,32 @@ const VideoRoom = () => {
         setRemoteStreams(prev => prev.filter(s => s.peerID !== userId));
       });
 
-      // Receive Offer (Caller -> Callee)
+      // Receive Offer (Caller -> Callee OR Renegotiation)
       socketRef.current.on('offer', (offer, id, username) => {
         if (!isMounted.current) return;
-        const peer = addPeer(offer, id, stream, username);
-        peersRef.current.push({ peerID: id, peer, username });
-        setPeers(prev => [...prev, { peerID: id, peer, username }]);
+        
+        // CRITICAL FIX: Check if we already have a connection to this user
+        // If yes, this is a renegotiation (e.g. Screen Share), so simply signal the existing peer
+        const existingPeer = peersRef.current.find(p => p.peerID === id);
+        
+        if (existingPeer) {
+          console.log("Renegotiating with existing peer:", id);
+          existingPeer.peer.signal(offer);
+        } else {
+          console.log("New offer from:", id);
+          const peer = addPeer(offer, id, stream, username);
+          peersRef.current.push({ peerID: id, peer, username });
+          setPeers(prev => [...prev, { peerID: id, peer, username }]);
+        }
       });
 
-      // Receive Answer (Callee -> Caller)
+      // Receive Answer
       socketRef.current.on('answer', (answer, id) => {
         const p = peersRef.current.find(p => p.peerID === id);
         if (p) p.peer.signal(answer);
       });
 
-      // Receive ICE Candidate (Network path)
+      // Receive ICE Candidate
       socketRef.current.on('ice-candidate', (candidate, id) => {
         const p = peersRef.current.find(p => p.peerID === id);
         if (p) p.peer.signal(candidate);
@@ -181,13 +205,14 @@ const VideoRoom = () => {
   const createPeer = (userToSignal, callerID, stream, username) => {
     const peer = new Peer({
       initiator: true,
-      trickle: true, // Enable Trickle ICE for better connections
+      trickle: true, 
       config: peerConfig,
       stream,
     });
 
     peer.on('signal', signal => {
-      // Split signals based on type
+      // If we are initiator, we send the Offer.
+      // If we are renegotiating, we might send another Offer.
       if (signal.type === 'offer') {
         socketRef.current.emit('offer', signal, roomId);
       } else if (signal.candidate) {
@@ -208,6 +233,7 @@ const VideoRoom = () => {
     });
 
     peer.on('signal', signal => {
+      // Receiver sends Answer
       if (signal.type === 'answer') {
         socketRef.current.emit('answer', signal, roomId);
       } else if (signal.candidate) {
@@ -221,7 +247,9 @@ const VideoRoom = () => {
   };
 
   const handleRemoteStream = (stream, peerID, username) => {
+    console.log("Received Stream:", stream.id, "from", peerID);
     setRemoteStreams(prev => {
+      // Prevent duplicates by ID
       if (prev.some(s => s.id === stream.id)) return prev;
       return [...prev, { id: stream.id, stream, peerID, username }];
     });
@@ -249,7 +277,13 @@ const VideoRoom = () => {
       setScreenStream(stream);
       setIsScreenSharing(true);
       setPinnedStreamId('local-screen'); 
-      peersRef.current.forEach(({ peer }) => peer.addStream(stream));
+      
+      // Add screen stream to all existing peers
+      // This triggers 'renegotiation' (sending new Offers)
+      peersRef.current.forEach(({ peer }) => {
+        peer.addStream(stream);
+      });
+
       stream.getVideoTracks()[0].onended = () => stopScreenShare();
       socketRef.current.emit('screen-share-started', roomId);
     } catch (e) { console.error(e); }
@@ -280,7 +314,6 @@ const VideoRoom = () => {
     if (screenStream) streams.push({ id: 'local-screen', stream: screenStream, isLocal: true, label: 'Your Screen' });
     
     remoteStreams.forEach(rs => {
-      // Use the captured username
       const name = rs.username || roomInfo?.participants.find(p => p._id === rs.peerID)?.username || `Participant ${rs.peerID.substr(0,4)}`;
       streams.push({ 
         id: rs.id, 
