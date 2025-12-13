@@ -5,20 +5,20 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  // 1. ADD LOADING STATE
-  const [loading, setLoading] = useState(true); 
+  // 1. New Loading State (Starts true)
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // 2. Fetch user on mount
-        const { data } = await api.get('/auth/me'); 
+        const { data } = await api.get('/auth/me');
         setUser(data.user);
       } catch (error) {
+        console.error("Auth check failed:", error);
         setUser(null);
       } finally {
-        // 3. Stop loading whether success or fail
-        setLoading(false); 
+        // 2. Stop loading whether success or fail
+        setLoading(false);
       }
     };
     checkAuth();
@@ -36,7 +36,7 @@ export const AuthProvider = ({ children }) => {
     window.location.href = '/';
   };
 
-  // 4. Pass 'loading' to the rest of the app
+  // 3. Expose 'loading' to the app
   return (
     <AuthContext.Provider value={{ user, login, logout, loading }}>
       {children}
