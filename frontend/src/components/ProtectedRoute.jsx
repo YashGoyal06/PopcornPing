@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
 
-  // 1. IF LOADING: Show a spinner or blank screen (Don't redirect yet!)
+  // 1. IF LOADING: Show a spinner (Don't redirect yet!)
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
